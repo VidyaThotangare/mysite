@@ -1,0 +1,170 @@
+```# dsp_client() - dump dsp server side statistics for given nexus
+#
+def dsp_client(nexus):
+        dict = { }
+        prev_dict = { }
+        prev_bytes = 0
+
+        # determine which side of the connection is the DSP client
+        # replication - Replication Source DE (show-stats)
+        # snapsync    - Source Host (show-peer-stats)
+        # export(V2P) - Target Host (show-peer-stats)
+        # since script could be run on replication source or target check nexus for client or server
+	# XXX - add support for Connector and Grid
+        if (nexus.count('Replication')) | (nexus.count('DataMover')):
+                # if this is the replication target(dsp server) then use show-peer-stats
+                if (nexus.count('nexus-s')):
+                        stat_name='show-peer-stats'
+                else:
+                        stat_name='show-stats'
+        else:
+		if (nexus.count('Export')):
+                	stat_name='show-stats'
+		else:
+                	stat_name='show-peer-stats'
+
+                
+        while True:
+                stri = StringIO(subprocess.Popen(['/opt/delphix/server/bin/jmxtool', 'dsp', stat_name, nexus], stdout=subprocess.PIPE).communicate()[0])
+                for line in stri:
+                        cols = line.strip().rstrip().split(':')
+                        dict[cols[0]] = cols[1::]
+
+                if len(prev_dict.keys()) == 0:
+                        prev_dict = dict.copy()
+                        time.sleep(interval)
+                        continue
+
+                cmds = int(dict['client.sum.totalCompleted'][0]) - int(prev_dict['client.sum.totalCompleted'][0])
+
+                if cmds != 0:
+                        disp_lock.acquire()
+			if (nexus.count('Export')):
+				print '{0} :: {1}'.format(time.ctime(),'DSP Client(DE Side)')
+			else:
+				print '{0} :: {1}'.format(time.ctime(),'DSP Client')
+
+                        complete_time = (int(dict['client.sum.completeTime'][0]) - int(prev_dict['client.sum.completeTime'][0])) / cmds
+                        dispatch_time = (int(dict['client.sum.dispatchTime'][0]) - int(prev_dict['client.sum.dispatchTime'][0])) / cmds
+                        execute_time = (int(dict['client.sum.executeTime'][0]) - int(prev_dict['client.sum.executeTime'][0])) / cmds
+                        network_time = (int(dict['client.sum.networkTime'][0]) - int(prev_dict['client.sum.networkTime'][0])) / cmds
+                        pending_time = (int(dict['client.sum.pendingTime'][0]) - int(prev_dict['client.sum.pendingTime'][0])) / cmds
+                        dsp_avg_queue = (int(dict['client.sum.totalActive'][0]) - int(prev_dict['client.sum.totalActive'][0])) / cmds
+                        total_bytes = (int(dict['client.sum.totalBytes'][0]) - int(prev_dict['client.sum.totalBytes'][0]))
+                        total_cbytes = (int(dict['client.sum.totalCompressedBytes'][0]) - int(prev_dict['client.sum.totalCompressedBytes'][0]))
+                        payload_size = (total_bytes / cmds) / 1024
+                        throughput = (total_bytes / interval) / 1024
+                        cthroughput = (total_cbytes / interval) / 1024
+        
+                        print '{0:>25} : {1} ns'.format('Average complete time', complete_time)
+                        print '{0:>25} : {1} ns'.format('Average dispatch time', dispatch_time)
+                        print '{0:>25} : {1} ns'.format('Average execute time', execute_time)
+                        print '{0:>25} : {1} ns'.format('Average network time', network_time)
+                        print '{0:>25} : {1} ns'.format('Average pending time', pending_time)
+                        print '{0:>25} : {1} KB'.format('Average payload size', payload_size)
+                        print '{0:>25} : {1}'.format('Average DSP queue', dsp_avg_queue)
+                        print '{0:>25} : {1}'.format('IOPS', cmds/interval)
+                        print '{0:>25} : {1} KB/s'.format('Throughput', throughput)
+                        print '{0:>25} : {1} KB/s'.format('Compressed Throughput', cthroughput)
+                        print '\n'
+                        disp_lock.release()
+
+                prev_dict = dict.copy()
+                time.sleep(interval)
+
+        return
+
+# Validate commandline provided nexus, or prompt user from existing nexus
+nexus=getnexus()
+
+# Create dameon threads to pull client and server side DSP stats
+#   use daemon threads so that sys.exit() upon interrupt doesn't try to join on the threads and hang
+ct = threading.Thread(target=dsp_client, args = (nexus,))
+st = threading.Thread(target=dsp_server, args = (nexus,))
+ct.daemon= True
+st.daemon= True
+
+# Start both threads
+ct.start()
+st.start()
+
+while True:
+        time.sleep(60)
+sys.exit(0)
+pvero@pvero-mbpro~/perf/dsp $ view dsp.py 
+
+        else:
+                if (nexus.count('Export')):
+                        stat_name='show-stats'
+                else:
+                        stat_name='show-peer-stats'
+
+
+        while True:
+                stri = StringIO(subprocess.Popen(['/opt/delphix/server/bin/jmxtool', 'dsp', stat_name, nexus], stdout=subprocess.PIPE).communicate()[0])
+                for line in stri:
+                        cols = line.strip().rstrip().split(':')
+                        dict[cols[0]] = cols[1::]
+
+                if len(prev_dict.keys()) == 0:
+                        prev_dict = dict.copy()
+                        time.sleep(interval)
+                        continue
+
+                cmds = int(dict['client.sum.totalCompleted'][0]) - int(prev_dict['client.sum.totalCompleted'][0])
+
+                if cmds != 0:
+                        disp_lock.acquire()
+                        if (nexus.count('Export')):
+                                print '{0} :: {1}'.format(time.ctime(),'DSP Client(DE Side)')
+                        else:
+                                print '{0} :: {1}'.format(time.ctime(),'DSP Client')
+
+                        complete_time = (int(dict['client.sum.completeTime'][0]) - int(prev_dict['client.sum.completeTime'][0])) / cmds
+                        dispatch_time = (int(dict['client.sum.dispatchTime'][0]) - int(prev_dict['client.sum.dispatchTime'][0])) / cmds
+                        execute_time = (int(dict['client.sum.executeTime'][0]) - int(prev_dict['client.sum.executeTime'][0])) / cmds
+                        network_time = (int(dict['client.sum.networkTime'][0]) - int(prev_dict['client.sum.networkTime'][0])) / cmds
+                        pending_time = (int(dict['client.sum.pendingTime'][0]) - int(prev_dict['client.sum.pendingTime'][0])) / cmds
+                        dsp_avg_queue = (int(dict['client.sum.totalActive'][0]) - int(prev_dict['client.sum.totalActive'][0])) / cmds
+                        total_bytes = (int(dict['client.sum.totalBytes'][0]) - int(prev_dict['client.sum.totalBytes'][0]))
+                        total_cbytes = (int(dict['client.sum.totalCompressedBytes'][0]) - int(prev_dict['client.sum.totalCompressedBytes'][0]))
+                        payload_size = (total_bytes / cmds) / 1024
+                        throughput = (total_bytes / interval) / 1024
+                        cthroughput = (total_cbytes / interval) / 1024
+
+                        print '{0:>25} : {1} ns'.format('Average complete time', complete_time)
+                        print '{0:>25} : {1} ns'.format('Average dispatch time', dispatch_time)
+                        print '{0:>25} : {1} ns'.format('Average execute time', execute_time)
+                        print '{0:>25} : {1} ns'.format('Average network time', network_time)
+                        print '{0:>25} : {1} ns'.format('Average pending time', pending_time)
+                        print '{0:>25} : {1} KB'.format('Average payload size', payload_size)
+                        print '{0:>25} : {1}'.format('Average DSP queue', dsp_avg_queue)
+                        print '{0:>25} : {1}'.format('IOPS', cmds/interval)
+                        print '{0:>25} : {1} KB/s'.format('Throughput', throughput)
+                        print '{0:>25} : {1} KB/s'.format('Compressed Throughput', cthroughput)
+                        print '\n'
+                        disp_lock.release()
+
+                prev_dict = dict.copy()
+                time.sleep(interval)
+
+        return
+
+# Validate commandline provided nexus, or prompt user from existing nexus
+nexus=getnexus()
+
+# Create dameon threads to pull client and server side DSP stats
+#   use daemon threads so that sys.exit() upon interrupt doesn't try to join on the threads and hang
+ct = threading.Thread(target=dsp_client, args = (nexus,))
+st = threading.Thread(target=dsp_server, args = (nexus,))
+ct.daemon= True
+st.daemon= True
+
+# Start both threads
+ct.start()
+st.start()
+
+while True:
+        time.sleep(60)
+sys.exit(0)
+```
